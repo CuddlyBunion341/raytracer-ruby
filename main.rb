@@ -14,6 +14,10 @@ class Vec3
     Vec3.new(x / length, y / length, z / length)
   end
 
+  def -@
+    Vec3.new(-x, -y, -z)
+  end
+
   def *(other)
     if other.is_a?(Vec3)
       Vec3.new(x * other.x, y * other.y, z * other.z)
@@ -100,6 +104,7 @@ class Renderer
 
     @origin = Vec3.new(0, 0, 0)
     @fov_percent = 1.5
+    @light_direction = Vec3.new(1, 1, 1).normalize
   end
 
   def render(scene)
@@ -116,9 +121,17 @@ class Renderer
           far_plane_height * (y / @height.to_f) - far_plane_height / 2,
           @depth
         )
-        direction = far_plane_point - @origin
-        ray = Ray.new(@origin, direction.normalize)
-        row << ray.march(scene, @depth)
+        direction = (far_plane_point - @origin).normalize
+
+        ray = Ray.new(@origin, direction)
+        distance = ray.march(scene, @depth)
+        collision_point = @origin + direction * distance
+
+        ray = Ray.new(collision_point - @light_direction * 0.1, -@light_direction)
+        light_distance = ray.march(scene, 10)
+        in_shadow = light_distance < 10
+
+        row << PixelValue.new(distance.to_f / @depth.to_f, in_shadow)
       end
       rows << row
     end
@@ -126,6 +139,43 @@ class Renderer
   end
 end
 
+class PixelValue
+  attr_accessor :distance, :shadow
+
+  def initialize(distance, shadow)
+    @distance = distance
+    @shadow = shadow
+  end
+
+  def to_ascii
+    "\e[#{bg_code}#{symbol}\e[0m" * 2
+  end
+
+  def symbol
+    case distance
+    when 0.95..1.0
+      "█"
+    when 0.8...0.95
+      "▓"
+    when 0.6...0.8
+      "▒"
+    when 0.4...0.6
+      "░"
+    when 0.2...0.4
+      " "
+    else
+      " "
+    end
+  end
+
+  def bg_code
+    if shadow
+      "\e[40m"
+    else
+      "\e[47m"
+    end
+  end
+end
 
 class Main
   def initialize
@@ -133,29 +183,11 @@ class Main
     @renderer = Renderer.new(32, 32, 10)
   end
 
-  def distance_to_color(distance)
-    normalized_distance = distance / @renderer.depth
-    case normalized_distance
-    when 0.95..1.0
-      "\e[47m█\e[0m"
-    when 0.8...0.95
-      "\e[47m▓\e[0m"
-    when 0.6...0.8
-      "\e[47m▒\e[0m"
-    when 0.4...0.6
-      "\e[47m░\e[0m"
-    when 0.2...0.4
-      "\e[47m \e[0m"
-    else
-      "\e[40m \e[0m"
-    end * 2
-  end
-
   def run
     rows = @renderer.render(@scene)
     rows.each do |row|
-      row.each do |distance|
-        print distance_to_color(distance)
+      row.each do |pixel_value|
+        print pixel_value.to_ascii
       end
       print "\n"
     end
