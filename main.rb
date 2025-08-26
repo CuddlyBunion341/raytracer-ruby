@@ -101,11 +101,11 @@ class Plane
 end
 
 class Scene
-  attr_accessor :spheres
+  attr_accessor :sdfs
 
   def initialize
     @sdfs = []
-    @sdfs << Sphere.new(Vec3.new(0, 2, 7), 2, Color.rgb(255, 0, 0))
+    @sdfs << Sphere.new(Vec3.new(2, 2, 6), 2, Color.rgb(255, 0, 0))
     @sdfs << Sphere.new(Vec3.new(-4, 2, 10), 2, Color.rgb(255, 255, 0))
     @sdfs << Plane.new(Color.rgb(255, 255, 255), Color.rgb(0, 0, 0))
   end
@@ -120,6 +120,13 @@ class Scene
       min_val[1]
     else
       Color.rgb(255, 255, 255)
+    end
+  end
+
+  def obj(point)
+    min_val = @sdfs.map { |obj| [obj.sdf(point), obj] }.min_by { |val, _| val }
+    if min_val[0] < 0.1
+      min_val[1]
     end
   end
 end
@@ -181,7 +188,29 @@ class Renderer
         light_distance = ray.march(scene, 10)
         in_shadow = light_distance < 10
 
-        row << PixelValue.new(distance.to_f, in_shadow, scene.color(collision_point))
+        collision_obj = scene.obj(collision_point)
+        pixi_color = collision_obj&.color(collision_point) || Color.rgb(255,255,255)
+
+        # normal
+        maybe_sphere = scene.obj(collision_point)
+        if maybe_sphere.is_a?(Sphere) && distance < @depth
+          reflection_direction = (collision_point - maybe_sphere.center).normalize
+          ray = Ray.new(collision_point, reflection_direction)
+
+          scene.sdfs = scene.sdfs.filter { |s| s != maybe_sphere }
+          reflection_distance = ray.march(scene, 10)
+          scene.sdfs << maybe_sphere
+
+          if reflection_distance < 10
+            reflection_landing = collision_point + reflection_direction * reflection_distance
+            reflection_object = scene.obj(reflection_landing)
+            if !reflection_object.nil? && reflection_object != maybe_sphere
+              pixi_color = reflection_object.color(reflection_landing) || Color.rgb(255,255,255)
+            end
+          end
+        end
+
+        row << PixelValue.new(distance.to_f, in_shadow, pixi_color)
       end
       rows << row
     end
