@@ -49,28 +49,78 @@ class Vec3
   end
 end
 
+class Color
+  attr_accessor :r,:g,:b
+
+  def self.rgb(r,g,b)
+    new(r,g,b)
+  end
+
+  def initialize(r,g,b)
+    @r = r
+    @g = g
+    @b = b
+  end
+end
+
 class Sphere
-  attr_accessor :center, :radius
-  def initialize(center, radius)
+  attr_accessor :center, :radius, :color
+  def initialize(center, radius, color)
     @center = center
     @radius = radius
+    @color = color
   end
 
   def sdf(point)
     (point - center).length - radius
   end
+
+  def color(_point)
+    @color
+  end
+end
+
+class Plane
+  def initialize(light_tile_color, dark_tile_color)
+    @light_tile_color = light_tile_color
+    @dark_tile_color = dark_tile_color
+    @floor_height = 4
+  end
+
+  def sdf(point)
+    (point.y - @floor_height).abs
+  end
+
+  def color(point)
+    if point.x.floor.even? == point.z.floor.even?
+      @light_tile_color
+    else
+      @dark_tile_color
+    end
+  end
 end
 
 class Scene
   attr_accessor :spheres
+
   def initialize
-    @spheres = []
-    @spheres << Sphere.new(Vec3.new(0, 0, 5), 2)
-    @spheres << Sphere.new(Vec3.new(-4, 0, 8), 2)
+    @sdfs = []
+    @sdfs << Sphere.new(Vec3.new(0, 2, 7), 2, Color.rgb(255, 0, 0))
+    @sdfs << Sphere.new(Vec3.new(-4, 2, 10), 2, Color.rgb(255, 255, 0))
+    @sdfs << Plane.new(Color.rgb(255, 255, 255), Color.rgb(0, 0, 0))
   end
 
   def sdf(point)
-    @spheres.map { |sphere| sphere.sdf(point) }.min
+    @sdfs.map { |obj| obj.sdf(point) }.min
+  end
+
+  def color(point)
+    min_val = @sdfs.map { |obj| [obj.sdf(point), obj.color(point)] }.min_by { |val, _| val }
+    if min_val[0] < 0.1
+      min_val[1]
+    else
+      Color.rgb(255, 255, 255)
+    end
   end
 end
 
@@ -131,7 +181,7 @@ class Renderer
         light_distance = ray.march(scene, 10)
         in_shadow = light_distance < 10
 
-        row << PixelValue.new(distance.to_f / @depth.to_f, in_shadow)
+        row << PixelValue.new(distance.to_f, in_shadow, scene.color(collision_point))
       end
       rows << row
     end
@@ -140,57 +190,52 @@ class Renderer
 end
 
 class PixelValue
-  attr_accessor :distance, :shadow
+  attr_accessor :distance, :shadow, :color
 
-  def initialize(distance, shadow)
-    @distance = distance
+  def initialize(distance, shadow, color)
+    @distance = distance / 2 + 0.5
     @shadow = shadow
+    @color = color
   end
 
-  def to_ascii
-    "\e[#{bg_code}#{symbol}\e[0m" * 2
-  end
+  def chunky_val
+    new_color = Color.new(@color.r, @color.g, @color.b)
 
-  def symbol
-    case distance
-    when 0.95..1.0
-      "█"
-    when 0.8...0.95
-      "▓"
-    when 0.6...0.8
-      "▒"
-    when 0.4...0.6
-      "░"
-    when 0.2...0.4
-      " "
-    else
-      " "
-    end
-  end
-
-  def bg_code
     if shadow
-      "\e[40m"
-    else
-      "\e[47m"
+      new_color.r *= 0.5
+      new_color.g *= 0.5
+      new_color.b *= 0.5
     end
+
+    ChunkyPNG::Color.rgb(
+      (new_color.r - @distance * 0.0).to_i,
+      (new_color.g - @distance * 0.0).to_i,
+      (new_color.b - @distance * 0.0).to_i
+    )
   end
 end
 
 class Main
   def initialize
     @scene = Scene.new
-    @renderer = Renderer.new(32, 32, 10)
+    @renderer = Renderer.new(256, 256, 20)
   end
 
   def run
+    require "chunky_png"
+
     rows = @renderer.render(@scene)
-    rows.each do |row|
-      row.each do |pixel_value|
-        print pixel_value.to_ascii
+    height = rows.size
+    width = rows.first.size
+    img = ChunkyPNG::Image.new(width, height, ChunkyPNG::Color::WHITE)
+
+    rows.each_with_index do |row, y|
+      row.each_with_index do |val, x|
+        img[x, y] = val.chunky_val
       end
-      print "\n"
     end
+    img.save("out.png")
+    puts "Written to './output.png'"
   end
 end
 
