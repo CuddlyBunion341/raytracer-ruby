@@ -1,5 +1,6 @@
 class Vec3
   attr_accessor :x, :y, :z
+
   def initialize(x, y, z)
     @x = x
     @y = y
@@ -50,13 +51,13 @@ class Vec3
 end
 
 class Color
-  attr_accessor :r,:g,:b
+  attr_accessor :r, :g, :b
 
-  def self.rgb(r,g,b)
-    new(r,g,b)
+  def self.rgb(r, g, b)
+    new(r, g, b)
   end
 
-  def initialize(r,g,b)
+  def initialize(r, g, b)
     @r = r
     @g = g
     @b = b
@@ -65,6 +66,7 @@ end
 
 class Sphere
   attr_accessor :center, :radius, :color
+
   def initialize(center, radius, color)
     @center = center
     @radius = radius
@@ -106,7 +108,8 @@ class Scene
   def initialize
     @sdfs = []
     @sdfs << Sphere.new(Vec3.new(2, 2, 6), 2, Color.rgb(255, 0, 0))
-    @sdfs << Sphere.new(Vec3.new(-4, 2, 10), 2, Color.rgb(255, 255, 0))
+    @sdfs << Sphere.new(Vec3.new(-4, 2, 8), 2, Color.rgb(0, 255, 0))
+    @sdfs << Sphere.new(Vec3.new(0, 2, 10), 2, Color.rgb(0, 0, 255))
     @sdfs << Plane.new(Color.rgb(255, 255, 255), Color.rgb(0, 0, 0))
   end
 
@@ -125,14 +128,15 @@ class Scene
 
   def obj(point)
     min_val = @sdfs.map { |obj| [obj.sdf(point), obj] }.min_by { |val, _| val }
-    if min_val[0] < 0.1
-      min_val[1]
-    end
+    return unless min_val[0] < 0.1
+
+    min_val[1]
   end
 end
 
 class Ray
   attr_accessor :origin, :direction
+
   def initialize(origin, direction)
     @origin = origin
     @direction = direction
@@ -189,7 +193,7 @@ class Renderer
         in_shadow = light_distance < 10
 
         collision_obj = scene.obj(collision_point)
-        pixi_color = collision_obj&.color(collision_point) || Color.rgb(255,255,255)
+        pixi_color = collision_obj&.color(collision_point) || Color.rgb(255, 255, 255)
 
         # normal
         maybe_sphere = scene.obj(collision_point)
@@ -205,7 +209,30 @@ class Renderer
             reflection_landing = collision_point + reflection_direction * reflection_distance
             reflection_object = scene.obj(reflection_landing)
             if !reflection_object.nil? && reflection_object != maybe_sphere
-              pixi_color = reflection_object.color(reflection_landing) || Color.rgb(255,255,255)
+
+              # shitty non-dry stuff
+
+              if !reflection_object.is_a?(Sphere)
+                pixi_color = reflection_object.color(reflection_landing) || Color.rgb(255, 255, 255)
+              else
+                last_reflection_landing = reflection_landing
+                last_reflection_object = reflection_object
+
+                reflection_direction = (last_reflection_landing - reflection_object.center).normalize
+                ray = Ray.new(last_reflection_landing, reflection_direction)
+
+                scene.sdfs = scene.sdfs.filter { |s| s != last_reflection_object }
+                reflection_distance = ray.march(scene, 10)
+                scene.sdfs << last_reflection_object
+
+                if reflection_distance < 10
+                  reflection_landing = last_reflection_landing + reflection_direction * reflection_distance
+                  reflection_object = scene.obj(reflection_landing)
+                  if !reflection_object.nil? && reflection_object != last_reflection_object
+                    pixi_color = reflection_object.color(reflection_landing) || Color.rgb(255, 255, 255)
+                  end
+                end
+              end
             end
           end
         end
@@ -247,7 +274,7 @@ end
 class Main
   def initialize
     @scene = Scene.new
-    @renderer = Renderer.new(256, 256, 20)
+    @renderer = Renderer.new(512, 512, 20)
   end
 
   def run
