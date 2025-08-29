@@ -274,7 +274,7 @@ end
 class Main
   def initialize
     @scene = Scene.new
-    @renderer = Renderer.new(512, 512, 20)
+    @renderer = Renderer.new(256, 256, 20)
   end
 
   def run
@@ -291,7 +291,7 @@ class Main
       end
     end
     img.save("out.png")
-    puts "Written to './output.png'"
+    puts "Written to './out.png'"
   end
 end
 
