@@ -247,12 +247,11 @@ class Renderer
           distance_to_projected = projected - inverse_prim_ray_dir
 
           reflection_direction = inverse_prim_ray_dir + scale.call(2, distance_to_projected)
+          reflection_direction = reflection_direction.normalize
 
-          ray = Ray.new(collision_point, reflection_direction.normalize)
-
-          scene.sdfs = scene.sdfs.filter { |s| s != sphere }
+          ray_origin = collision_point + scale.call(0.01, reflection_direction)
+          ray = Ray.new(ray_origin, reflection_direction)
           reflection_distance = ray.march(scene, 10)
-          scene.sdfs << sphere
 
           if reflection_distance < 10
             reflection_landing = collision_point + reflection_direction * reflection_distance
@@ -326,7 +325,7 @@ end
 class Main
   def initialize
     @scene = Scene.new
-    @renderer = Renderer.new(256, 256, 20)
+    @renderer = Renderer.new(512, 512, 20)
   end
 
   def run
