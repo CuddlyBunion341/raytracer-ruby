@@ -58,6 +58,12 @@ class Vec3
       raise "Invalid type"
     end
   end
+
+  def ==(other)
+    x == other.x &&
+      y == other.y &&
+      z == other.z
+  end
 end
 
 class Color
@@ -178,12 +184,6 @@ class Renderer
     @light_direction = Vec3.new(1, 1, 1).normalize
   end
 
-  def shadow_at_point(origin, max_light_distance = 10)
-  end
-
-  def sphere_reflection(collision_point, ray_direction, sphere)
-  end
-
   def prepare_reflection_ray(sphere, collision_point, ray_direction)
     sphere_normal = (collision_point - sphere.center).normalize
     ray_direction = -ray_direction
@@ -196,6 +196,25 @@ class Renderer
 
     ray_origin = collision_point + (reflection_direction * 0.01)
     Ray.new(ray_origin, reflection_direction)
+  end
+
+  def calculate_bounces(scene, initial_ray, current_bounce, max_bounces = 5)
+    reflection_distance = initial_ray.march(scene, 10)
+
+    return unless reflection_distance < 10
+
+    reflection_landing = initial_ray.origin + initial_ray.direction * reflection_distance
+    reflection_object = scene.obj(reflection_landing)
+
+    return reflection_object&.color(reflection_landing) if current_bounce >= max_bounces
+
+    if reflection_object.is_a?(Sphere)
+      offset_spot = reflection_landing + initial_ray.direction * 0.1
+      new_ray = prepare_reflection_ray(reflection_object, offset_spot, initial_ray.direction)
+      calculate_bounces(scene, new_ray, current_bounce + 1, max_bounces)
+    else
+      reflection_object&.color(reflection_landing)
+    end
   end
 
   LIGHT_DISTANCE = 10
@@ -229,19 +248,9 @@ class Renderer
         collision_object = scene.obj(collision_point)
 
         if collision_object.is_a?(Sphere) && distance < @depth
-          sphere = collision_object
-          reflection_ray = prepare_reflection_ray(sphere, collision_point, primary_ray.direction)
-          reflection_distance = reflection_ray.march(scene, 10)
-
-          if reflection_distance < 10
-            reflection_landing = collision_point + reflection_ray.direction * reflection_distance
-            reflection_object = scene.obj(reflection_landing)
-
-            unless reflection_object.nil?
-              color = reflection_object.color(reflection_landing)
-              pixi_color = color
-            end
-          end
+          reflection_ray = prepare_reflection_ray(collision_object, collision_point, primary_ray.direction)
+          alternate_color = calculate_bounces(scene, reflection_ray, 0)
+          pixi_color = alternate_color if alternate_color
         end
 
         row << PixelValue.new(distance.to_f, in_shadow, pixi_color)
@@ -281,7 +290,7 @@ end
 class Main
   def initialize
     @scene = Scene.new
-    @renderer = Renderer.new(512, 512, 20)
+    @renderer = Renderer.new(256, 256, 20)
   end
 
   def run
