@@ -194,14 +194,18 @@ class Renderer
     reflection_direction = ray_direction + (distance_to_projected * 2.0)
     reflection_direction = reflection_direction.normalize
 
-    ray_origin = collision_point + (reflection_direction * 0.01)
+    ray_origin = collision_point + (reflection_direction * 0.1)
     Ray.new(ray_origin, reflection_direction)
   end
 
   def calculate_bounces(scene, initial_ray, current_bounce, max_bounces = 5)
     reflection_distance = initial_ray.march(scene, 10)
 
-    return unless reflection_distance < 10
+    return Color.rgb(
+        initial_ray.direction.x * 255,
+        initial_ray.direction.y * 255,
+        initial_ray.direction.z * 255,
+      ) if reflection_distance >= 10
 
     reflection_landing = initial_ray.origin + initial_ray.direction * reflection_distance
     reflection_object = scene.obj(reflection_landing)
@@ -209,10 +213,9 @@ class Renderer
     return reflection_object&.color(reflection_landing) if current_bounce >= max_bounces
 
     if reflection_object.is_a?(Sphere)
-      offset_spot = reflection_landing + initial_ray.direction * 0.1
-      new_ray = prepare_reflection_ray(reflection_object, offset_spot, initial_ray.direction)
+      new_ray = prepare_reflection_ray(reflection_object, reflection_landing, initial_ray.direction)
       calculate_bounces(scene, new_ray, current_bounce + 1, max_bounces)
-    else
+    elsif reflection_object.is_a?(Plane)
       reflection_object&.color(reflection_landing)
     end
   end
