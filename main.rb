@@ -198,7 +198,7 @@ class Renderer
     Ray.new(ray_origin, reflection_direction)
   end
 
-  def calculate_bounces(scene, initial_ray, current_bounce, max_bounces = 5)
+  def calculate_bounces(scene, initial_ray, current_bounce, max_bounces = 10)
     reflection_distance = initial_ray.march(scene, 10)
 
     return Color.rgb(
@@ -293,7 +293,7 @@ end
 class Main
   def initialize
     @scene = Scene.new
-    @renderer = Renderer.new(256, 256, 20)
+    @renderer = Renderer.new(512, 512, 50)
   end
 
   def run
