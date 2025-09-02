@@ -248,7 +248,7 @@ class Renderer
 
           reflection_direction = inverse_prim_ray_dir + scale.call(2, distance_to_projected)
 
-          ray = Ray.new(collision_point, reflection_direction)
+          ray = Ray.new(collision_point, reflection_direction.normalize)
 
           scene.sdfs = scene.sdfs.filter { |s| s != sphere }
           reflection_distance = ray.march(scene, 10)
