@@ -168,10 +168,21 @@ class Renderer
     @light_direction = Vec3.new(1, 1, 1).normalize
   end
 
+  def shadow_at_point(origin, max_light_distance = 10)
+
+  end
+
+  def sphere_reflection(collision_point, ray_direction, sphere)
+
+  end
+
+  LIGHT_DISTANCE = 10
+
   def render(scene)
     aspect_ratio = @width.to_f / @height.to_f
     far_plane_width = @depth * @fov_percent * aspect_ratio
     far_plane_height = @depth * @fov_percent
+
 
     rows = []
     @height.times do |y|
@@ -184,55 +195,96 @@ class Renderer
         )
         direction = (far_plane_point - @origin).normalize
 
-        ray = Ray.new(@origin, direction)
-        distance = ray.march(scene, @depth)
+        primary_ray = Ray.new(@origin, direction)
+        distance = primary_ray.march(scene, @depth)
         collision_point = @origin + direction * distance
-
-        ray = Ray.new(collision_point - @light_direction * 0.1, -@light_direction)
-        light_distance = ray.march(scene, 10)
-        in_shadow = light_distance < 10
-
         collision_obj = scene.obj(collision_point)
         pixi_color = collision_obj&.color(collision_point) || Color.rgb(255, 255, 255)
 
+        light_ray = Ray.new(collision_point - @light_direction * 0.1, -@light_direction)
+        light_distance = light_ray.march(scene, LIGHT_DISTANCE)
+        in_shadow = light_distance < LIGHT_DISTANCE
+
         # normal
-        maybe_sphere = scene.obj(collision_point)
-        if maybe_sphere.is_a?(Sphere) && distance < @depth
-          reflection_direction = (collision_point - maybe_sphere.center).normalize
+        collision_object = scene.obj(collision_point)
+        if collision_object.is_a?(Sphere) && distance < @depth
+          sphere = collision_object
+          sphere_normal = (collision_point - sphere.center).normalize
+
+
+          dot_product = ->(vec1, vec2) { 
+            vec1.x * vec2.x + 
+            vec1.y * vec2.y + 
+            vec1.z * vec2.z
+          }
+
+          
+          length = ->(vec) {
+            Math.sqrt(length_squared.call(vec))
+          }
+
+          length_squared = ->(vec) {
+              vec.x * vec.x +
+              vec.y * vec.y +
+              vec.z * vec.z
+          }
+
+          scale = ->(scalar, vec) {
+            Vec3.new(
+              scalar * vec.x,
+              scalar * vec.y,
+              scalar * vec.z,
+            )
+          }
+
+          proj_a_onto_b = ->(a, b) {
+            scale.call(dot_product.call(a, b) / length_squared.call(a), b)
+          }
+
+          inverse_prim_ray_dir = -primary_ray.direction
+
+          projected = proj_a_onto_b.call(inverse_prim_ray_dir, sphere_normal)
+          distance_to_projected = projected - inverse_prim_ray_dir
+
+          reflection_direction = inverse_prim_ray_dir + scale.call(2, distance_to_projected)
+
           ray = Ray.new(collision_point, reflection_direction)
 
-          scene.sdfs = scene.sdfs.filter { |s| s != maybe_sphere }
+          scene.sdfs = scene.sdfs.filter { |s| s != sphere }
           reflection_distance = ray.march(scene, 10)
-          scene.sdfs << maybe_sphere
+          scene.sdfs << sphere
 
           if reflection_distance < 10
             reflection_landing = collision_point + reflection_direction * reflection_distance
             reflection_object = scene.obj(reflection_landing)
-            if !reflection_object.nil? && reflection_object != maybe_sphere
+
+            if !reflection_object.nil?
+              color = reflection_object.color(reflection_landing)
+              pixi_color = color
 
               # shitty non-dry stuff
 
-              if !reflection_object.is_a?(Sphere)
-                pixi_color = reflection_object.color(reflection_landing) || Color.rgb(255, 255, 255)
-              else
-                last_reflection_landing = reflection_landing
-                last_reflection_object = reflection_object
-
-                reflection_direction = (last_reflection_landing - reflection_object.center).normalize
-                ray = Ray.new(last_reflection_landing, reflection_direction)
-
-                scene.sdfs = scene.sdfs.filter { |s| s != last_reflection_object }
-                reflection_distance = ray.march(scene, 10)
-                scene.sdfs << last_reflection_object
-
-                if reflection_distance < 10
-                  reflection_landing = last_reflection_landing + reflection_direction * reflection_distance
-                  reflection_object = scene.obj(reflection_landing)
-                  if !reflection_object.nil? && reflection_object != last_reflection_object
-                    pixi_color = reflection_object.color(reflection_landing) || Color.rgb(255, 255, 255)
-                  end
-                end
-              end
+              # if !reflection_object.is_a?(Sphere)
+              #   pixi_color = reflection_object.color(reflection_landing) || Color.rgb(255, 255, 255)
+              # else
+              #   last_reflection_landing = reflection_landing
+              #   last_reflection_object = reflection_object
+              #
+              #   reflection_direction = (last_reflection_landing - reflection_object.center).normalize
+              #   ray = Ray.new(last_reflection_landing, reflection_direction)
+              #
+              #   scene.sdfs = scene.sdfs.filter { |s| s != last_reflection_object }
+              #   reflection_distance = ray.march(scene, 10)
+              #   scene.sdfs << last_reflection_object
+              #
+              #   if reflection_distance < 10
+              #     reflection_landing = last_reflection_landing + reflection_direction * reflection_distance
+              #     reflection_object = scene.obj(reflection_landing)
+              #     if !reflection_object.nil? && reflection_object != last_reflection_object
+              #       pixi_color = reflection_object.color(reflection_landing) || Color.rgb(255, 255, 255)
+              #     end
+              #   end
+              # end
             end
           end
         end
