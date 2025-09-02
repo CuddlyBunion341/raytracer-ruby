@@ -19,6 +19,16 @@ class Vec3
     Vec3.new(-x, -y, -z)
   end
 
+  def dot(other)
+    x * other.x +
+      y * other.y +
+      z * other.z
+  end
+
+  def proj(other)
+    other * (dot(other) / dot(self))
+  end
+
   def *(other)
     if other.is_a?(Vec3)
       Vec3.new(x * other.x, y * other.y, z * other.z)
@@ -169,11 +179,9 @@ class Renderer
   end
 
   def shadow_at_point(origin, max_light_distance = 10)
-
   end
 
   def sphere_reflection(collision_point, ray_direction, sphere)
-
   end
 
   LIGHT_DISTANCE = 10
@@ -182,7 +190,6 @@ class Renderer
     aspect_ratio = @width.to_f / @height.to_f
     far_plane_width = @depth * @fov_percent * aspect_ratio
     far_plane_height = @depth * @fov_percent
-
 
     rows = []
     @height.times do |y|
@@ -205,51 +212,20 @@ class Renderer
         light_distance = light_ray.march(scene, LIGHT_DISTANCE)
         in_shadow = light_distance < LIGHT_DISTANCE
 
-        # normal
         collision_object = scene.obj(collision_point)
         if collision_object.is_a?(Sphere) && distance < @depth
           sphere = collision_object
           sphere_normal = (collision_point - sphere.center).normalize
 
-
-          dot_product = ->(vec1, vec2) { 
-            vec1.x * vec2.x + 
-            vec1.y * vec2.y + 
-            vec1.z * vec2.z
-          }
-
-          
-          length = ->(vec) {
-            Math.sqrt(length_squared.call(vec))
-          }
-
-          length_squared = ->(vec) {
-              vec.x * vec.x +
-              vec.y * vec.y +
-              vec.z * vec.z
-          }
-
-          scale = ->(scalar, vec) {
-            Vec3.new(
-              scalar * vec.x,
-              scalar * vec.y,
-              scalar * vec.z,
-            )
-          }
-
-          proj_a_onto_b = ->(a, b) {
-            scale.call(dot_product.call(a, b) / length_squared.call(a), b)
-          }
-
           inverse_prim_ray_dir = -primary_ray.direction
 
-          projected = proj_a_onto_b.call(inverse_prim_ray_dir, sphere_normal)
+          projected = inverse_prim_ray_dir.proj(sphere_normal)
           distance_to_projected = projected - inverse_prim_ray_dir
 
-          reflection_direction = inverse_prim_ray_dir + scale.call(2, distance_to_projected)
+          reflection_direction = inverse_prim_ray_dir + (distance_to_projected * 2.0)
           reflection_direction = reflection_direction.normalize
 
-          ray_origin = collision_point + scale.call(0.01, reflection_direction)
+          ray_origin = collision_point + (reflection_direction * 0.01)
           ray = Ray.new(ray_origin, reflection_direction)
           reflection_distance = ray.march(scene, 10)
 
@@ -257,33 +233,9 @@ class Renderer
             reflection_landing = collision_point + reflection_direction * reflection_distance
             reflection_object = scene.obj(reflection_landing)
 
-            if !reflection_object.nil?
+            unless reflection_object.nil?
               color = reflection_object.color(reflection_landing)
               pixi_color = color
-
-              # shitty non-dry stuff
-
-              # if !reflection_object.is_a?(Sphere)
-              #   pixi_color = reflection_object.color(reflection_landing) || Color.rgb(255, 255, 255)
-              # else
-              #   last_reflection_landing = reflection_landing
-              #   last_reflection_object = reflection_object
-              #
-              #   reflection_direction = (last_reflection_landing - reflection_object.center).normalize
-              #   ray = Ray.new(last_reflection_landing, reflection_direction)
-              #
-              #   scene.sdfs = scene.sdfs.filter { |s| s != last_reflection_object }
-              #   reflection_distance = ray.march(scene, 10)
-              #   scene.sdfs << last_reflection_object
-              #
-              #   if reflection_distance < 10
-              #     reflection_landing = last_reflection_landing + reflection_direction * reflection_distance
-              #     reflection_object = scene.obj(reflection_landing)
-              #     if !reflection_object.nil? && reflection_object != last_reflection_object
-              #       pixi_color = reflection_object.color(reflection_landing) || Color.rgb(255, 255, 255)
-              #     end
-              #   end
-              # end
             end
           end
         end
