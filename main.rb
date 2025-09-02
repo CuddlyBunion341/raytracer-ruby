@@ -184,6 +184,20 @@ class Renderer
   def sphere_reflection(collision_point, ray_direction, sphere)
   end
 
+  def prepare_reflection_ray(sphere, collision_point, ray_direction)
+    sphere_normal = (collision_point - sphere.center).normalize
+    ray_direction = -ray_direction
+
+    projected = ray_direction.proj(sphere_normal)
+    distance_to_projected = projected - ray_direction
+
+    reflection_direction = ray_direction + (distance_to_projected * 2.0)
+    reflection_direction = reflection_direction.normalize
+
+    ray_origin = collision_point + (reflection_direction * 0.01)
+    Ray.new(ray_origin, reflection_direction)
+  end
+
   LIGHT_DISTANCE = 10
 
   def render(scene)
@@ -213,24 +227,14 @@ class Renderer
         in_shadow = light_distance < LIGHT_DISTANCE
 
         collision_object = scene.obj(collision_point)
+
         if collision_object.is_a?(Sphere) && distance < @depth
           sphere = collision_object
-          sphere_normal = (collision_point - sphere.center).normalize
-
-          inverse_prim_ray_dir = -primary_ray.direction
-
-          projected = inverse_prim_ray_dir.proj(sphere_normal)
-          distance_to_projected = projected - inverse_prim_ray_dir
-
-          reflection_direction = inverse_prim_ray_dir + (distance_to_projected * 2.0)
-          reflection_direction = reflection_direction.normalize
-
-          ray_origin = collision_point + (reflection_direction * 0.01)
-          ray = Ray.new(ray_origin, reflection_direction)
-          reflection_distance = ray.march(scene, 10)
+          reflection_ray = prepare_reflection_ray(sphere, collision_point, primary_ray.direction)
+          reflection_distance = reflection_ray.march(scene, 10)
 
           if reflection_distance < 10
-            reflection_landing = collision_point + reflection_direction * reflection_distance
+            reflection_landing = collision_point + reflection_ray.direction * reflection_distance
             reflection_object = scene.obj(reflection_landing)
 
             unless reflection_object.nil?
